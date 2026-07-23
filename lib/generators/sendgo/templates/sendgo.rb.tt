@@ -1,0 +1,28 @@
+# frozen_string_literal: true
+
+# Sendgo Rails 설정
+#
+# 아래 값들은 Rails.application.config.sendgo(ActiveSupport::OrderedOptions)에 저장되며
+# Sendgo::Rails.client 가 최초 호출될 때 Sendgo::Client 생성에 사용됩니다.
+#
+# 값을 비워두면 동일한 이름의 ENV 환경변수로 자동 폴백합니다.
+# 시크릿 키는 코드에 하드코딩하지 말고 환경변수 또는 Rails credentials로 관리하세요.
+Rails.application.config.sendgo.tap do |config|
+  # Sendgo 액세스 키 (필수)
+  config.access_key       = ENV["SENDGO_ACCESS_KEY"]
+
+  # Sendgo 시크릿 키 (필수)
+  config.secret_key       = ENV["SENDGO_SECRET_KEY"]
+
+  # 카카오 발신프로필 키 (알림톡/친구톡 사용 시)
+  config.kakao_sender_key = ENV["SENDGO_KAKAO_SENDER_KEY"]
+
+  # SMS 발신자 키 (SMS/LMS/MMS 사용 시)
+  config.sms_sender_key   = ENV["SENDGO_SMS_SENDER_KEY"]
+
+  # API 버전 (기본값: v2)
+  config.api_version      = ENV.fetch("SENDGO_API_VERSION", "v2")
+
+  # API 기본 URL (기본값: https://sendgo.io)
+  config.url              = ENV.fetch("SENDGO_URL", "https://sendgo.io")
+end

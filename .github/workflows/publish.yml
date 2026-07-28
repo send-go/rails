@@ -1,0 +1,24 @@
+name: Publish to RubyGems
+
+# vX.Y.Z 태그 push 또는 수동 실행 시 RubyGems 로 배포합니다.
+# RubyGems Trusted Publishing(OIDC) 사용 — 장기 토큰 불필요.
+# 사전 조건: rubygems.org 에 이 gem 의 Trusted Publisher(GitHub Actions, 이 repo, publish.yml) 등록.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC (Trusted Publishing)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: RubyGems 배포 (OIDC)
+        uses: rubygems/release-gem@v1

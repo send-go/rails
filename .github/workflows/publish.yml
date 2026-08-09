@@ -20,5 +20,9 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-      - name: RubyGems 배포 (OIDC)
-        uses: rubygems/release-gem@v1
+      - name: RubyGems 자격증명 설정 (OIDC)
+        uses: rubygems/configure-rubygems-credentials@v2.1.0
+      - name: gem 빌드
+        run: gem build sendgo-rails.gemspec
+      - name: RubyGems 배포
+        run: gem push sendgo-rails-*.gem

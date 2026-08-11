@@ -16,6 +16,14 @@ module Sendgo
   #     template_code: "ORDER_CONFIRM_001",
   #     contacts: [{ contact: "01012345678", var1: "ORD-001" }]
   #   )
+  #
+  # @example 브랜드메시지 (친구톡의 후속 채널, v2 전용)
+  #   Sendgo::Rails.client.brand_message.send(
+  #     targeting: "M",
+  #     message_type: "FL",
+  #     friend_template_uuid: "9cd5460b-6458-4edc-9b11-c26d3013c340",
+  #     contacts: [{ contact: "01012345678", var1: "29,000원" }]
+  #   )
   module Rails
     class << self
       # 메모이즈된 Sendgo::Client 인스턴스를 반환한다.

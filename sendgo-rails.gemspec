@@ -17,6 +17,6 @@ Gem::Specification.new do |spec|
   spec.files         = Dir["lib/**/*", "README.md", "LICENSE"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "sendgo", "~> 1.0"
+  spec.add_dependency "sendgo", "~> 1.3"
   spec.add_dependency "railties", ">= 6.1"
 end

@@ -337,7 +337,117 @@ A. `Sendgo::Rails.reset!`을 호출하면 메모이즈된 클라이언트가 초
 사용 예시와 파라미터는 [코어 README](https://github.com/send-go) 와
 [SDK 가이드](https://sendgo.io/ko/sdk) 를 참고하세요.
 
+## 관리 API — 채널·템플릿·발신번호 등록 (v2 전용)
+
+`Sendgo::Rails.client` 에 코어의 관리 서비스가 그대로 붙어 있습니다.
+콘솔에서만 되던 등록·심사를 컨트롤러나 rake 태스크에서 처리할 수 있습니다.
+
+| 접근 | 하는 일 | 계정 |
+| --- | --- | --- |
+| `.kakao_senders` | 카카오 채널 인증·등록·동기화, 브랜드메시지 M/N 신청 | 기업 |
+| `.notice_templates` | 알림톡 템플릿 CRUD, 검수 요청·취소, 승인 취소, 휴면 해제 | 기업 |
+| `.brand_templates` | 브랜드메시지 템플릿 CRUD, 동기화, 가져오기 | 기업 |
+| `.sender_registration` | 발신번호 등록 신청, 중복 확인, 유형 안내 | 개인·기업 |
+| `.message_templates` | 문자 상용구 템플릿 CRUD | 개인·기업 |
+| `.kakao_images` | 카카오 이미지 업로드 — 템플릿용 URL 발급 | 기업 |
+| `.rejected_numbers` | 수신거부(080) 번호 조회 | 개인·기업 |
+| `.webhook` | 이벤트 웹훅 구독 — 심사 결과 수신 | 개인·기업 |
+
+> **sendgo.io 콘솔에 들어올 일이 없습니다.** 고객의 채널·발신번호·템플릿을
+> 여러분 화면만으로 끝까지 처리할 수 있습니다. 휴대폰 발신번호는 콘솔의 PASS
+> 본인인증 대신 **신분증 사본(`identityDocument`)을 받아 sendgo 운영자가 대신
+> 심사**합니다.
+>
+> 사람이 개입하는 지점은 **카카오 채널 인증번호 하나**뿐이고, 그마저도
+> 여러분 화면에서 입력받으면 됩니다 — 카카오가 관리자 휴대폰으로 직접 보내는
+> 확인이라 없앨 수 없습니다.
+>
+> 심사가 붙는 것들은 **비동기**입니다. 등록 호출이 성공했다는 건 "접수됐다"는
+> 뜻이지 "쓸 수 있다"는 뜻이 아닙니다 — 웹훅을 구독해 결과를 받으세요.
+
+```ruby
+# app/controllers/onboarding_controller.rb
+class OnboardingController < ApplicationController
+  # 1단계 — 카카오가 관리자 휴대폰으로 인증번호를 SMS 발송한다
+  def request_channel_code
+    Sendgo::Rails.client.kakao_senders.request_token(params[:yellow_id], params[:phone])
+    render json: { message: "인증번호를 발송했습니다." }
+  end
+
+  # 2단계 — 사용자가 입력한 인증번호로 발신프로필 생성
+  def create_channel
+    created = Sendgo::Rails.client.kakao_senders.create(
+      token: params[:code],
+      yellow_id: params[:yellow_id],
+      phone_number: params[:phone],
+      category_code: "001001"
+    )
+
+    render json: created.dig("data", "sender")
+  end
+end
+```
+
+```ruby
+# lib/tasks/sendgo.rake
+namespace :sendgo do
+  desc "표준 알림톡 템플릿을 등록하고 검수를 요청한다"
+  task :provision_templates, [:kakao_sender_key] => :environment do |_t, args|
+    created = Sendgo::Rails.client.notice_templates.create(
+      kakao_sender_key: args[:kakao_sender_key],
+      template_name: "주문 접수 안내",
+      template_content: "\#{name}님, 주문 \#{orderNo}이 접수되었습니다.",
+      template_message_type: "BA",
+      template_emphasize_type: "NONE",
+      category_code: "001001",
+      message_purpose: "order_delivery",
+      legal_basis: "transaction",
+      benefit_origin: "none",
+      expiry_type: "none"
+    )
+
+    code = created.dig("data", "template", "templateCode")
+    Sendgo::Rails.client.notice_templates.request_inspection(code)
+
+    puts "검수 요청 완료: #{code}"
+  end
+
+  desc "검수 결과를 확인한다 — 30분마다 돌린다"
+  task poll_inspections: :environment do
+    PendingTemplate.where(approved_at: nil).find_each do |pending|
+      result = Sendgo::Rails.client.notice_templates.sync(pending.template_code)
+      status = result.dig("data", "template", "inspectionStatus")
+
+      pending.update!(approved_at: Time.current) if status == "APR"
+      pending.update!(rejected_reason: result.dig("data", "template", "comments")) if status == "REJ"
+    end
+  end
+end
+```
+
+검수는 30분~1영업일 걸립니다. 배포 파이프라인 안에서 동기적으로 기다리지 말고
+`solid_queue` 나 cron 으로 폴링하세요.
+
+전체 파라미터는 [sendgo gem README](https://github.com/send-go/ruby) 를 참고하세요.
+
+---
+
 ## 변경 사항
+
+### 1.3.0 (2026-09-11)
+
+- **관리 API 노출** — 코어 1.3.0 의 `kakao_senders` · `notice_templates` ·
+  `brand_templates` · `sender_registration` · `message_templates` 를
+  `Sendgo::Rails.client` 에서 그대로 쓸 수 있습니다. 콘솔에서만 되던 채널 등록,
+  알림톡 템플릿 검수 요청, 발신번호 심사 접수를 컨트롤러나 rake 태스크에서
+  처리합니다.
+- `sendgo` 젬 의존성을 `~> 1.3` 으로 올렸습니다.
+- **이벤트 웹훅** 추가 — 발신번호 승인, 알림톡 검수 결과, 채널 차단,
+  브랜드메시지 타겟팅 결과를 구독해 받습니다. 서명은 받은 원본 바이트로
+  검증합니다(SDK 에 검증 헬퍼 포함).
+- **카카오 이미지 업로드** 추가 — 브랜드메시지 템플릿의 `imageUrl` 은 카카오가
+  호스팅하는 URL 이어야 하는데, 그 URL 을 얻는 길이 콘솔에만 있었습니다.
+- **수신거부(080) 조회** 추가 — 자기 DB 의 수신 상태를 맞출 수 있습니다.
 
 ### 1.2.1 (2026-08-14)
 
